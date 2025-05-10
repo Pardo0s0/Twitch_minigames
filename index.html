@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruleta de Twitch</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/confetti-js/0.0.18/confetti.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: transparent;
+            font-family: 'Arial', sans-serif;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        
+        #container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            display: none;
+        }
+        
+        #wheelContainer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            transition: transform 5s cubic-bezier(0.2, 0.1, 0.1, 1.0);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        
+        #centerCircle {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background-color: white;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        
+        #pointer {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 50px;
+            z-index: 2;
+        }
+        
+        #pointer:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 30px solid red;
+        }
+        
+        .segment {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 50% 100%);
+            transform-origin: center left;
+        }
+        
+        .segment-text {
+            position: absolute;
+            left: 60%;
+            top: 20%;
+            transform: rotate(22.5deg);
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            text-shadow: 1px 1px 2px black;
+            max-width: 120px;
+            text-align: center;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        
+        #username {
+            font-size: 24px;
+            margin-bottom: 20px;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 10px;
+            animation: fadeIn 0.5s ease-in-out;
+            text-shadow: 1px 1px 2px black;
+            max-width: 80%;
+            text-align: center;
+            word-break: break-word;
+        }
+        
+        #resultDisplay {
+            font-size: 36px;
+            margin-top: 30px;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 15px 30px;
+            border-radius: 10px;
+            display: none;
+            animation: scaleIn 0.5s ease-in-out;
+            text-align: center;
+            max-width: 80%;
+            word-break: break-word;
+        }
+        
+        #skullContainer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+        
+        .skull {
+            position: absolute;
+            font-size: 24px;
+            animation: fallDown 3s linear;
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        @keyframes fallDown {
+            0% { transform: translateY(-50px); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(calc(100vh + 50px)); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="username"></div>
+    <div id="container">
+        <div id="wheelContainer">
+            <div id="wheel"></div>
+            <div id="centerCircle"></div>
+            <div id="pointer"></div>
+        </div>
+    </div>
+    <div id="resultDisplay"></div>
+    <div id="skullContainer"></div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        // Configuración de la ruleta (puedes modificar esta parte)
+        const config = {
+            items: [
+                // Premios (isPrize: true)
+                { text: "Sub gratis", color: "#FFC107", isPrize: true },
+                { text: "100 bits", color: "#4CAF50", isPrize: true },
+                { text: "Regalo de juego", color: "#2196F3", isPrize: true },
+                { text: "Raid especial", color: "#9C27B0", isPrize: true },
+                { text: "VIP por un día", color: "#E91E63", isPrize: true },
+                
+                // Castigos (isPrize: false)
+                { text: "Beber un vaso de agua", color: "#607D8B", isPrize: false },
+                { text: "Imitar un animal", color: "#795548", isPrize: false },
+                { text: "Contar un chiste malo", color: "#FF5722", isPrize: false },
+                { text: "5 minutos sin hablar", color: "#9E9E9E", isPrize: false },
+                { text: "Hablar en inglés por 2 min", color: "#FFEB3B", isPrize: false },
+                { text: "Bailar una canción", color: "#FF9800", isPrize: false },
+                { text: "Timeout de 10 min", color: "#F44336", isPrize: false },
+                { text: "Cantar una canción", color: "#8BC34A", isPrize: false },
+                { text: "Hacer 10 sentadillas", color: "#673AB7", isPrize: false },
+                { text: "Contar historia vergonzosa", color: "#3F51B5", isPrize: false }
+            ],
+            // Configuración de probabilidades (mayor número = mayor probabilidad)
+            probability: {
+                prize: 1,      // Probabilidad para premios
+                punishment: 3  // Probabilidad para castigos
+            }
+        };
+
+        // Variables globales
+        let wheel;
+        let isSpinning = false;
+        let confettiInstance;
+        let urlParams = new URLSearchParams(window.location.search);
+        
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+            setupWheel();
+            setupConfetti();
+            
+            // Escuchar mensajes desde OBS
+            window.addEventListener('message', function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'SPIN' && !isSpinning) {
+                        spinWheel(data.username || 'Usuario');
+                    }
+                } catch (e) {
+                    console.error('Error processing message:', e);
+                }
+            });
+            
+            // Para pruebas: permitir girar la ruleta con clic
+            document.body.addEventListener('click', () => {
+                if (!isSpinning) {
+                    spinWheel('Usuario de Prueba');
+                }
+            });
+            
+            // Para pruebas: permitir usar parámetro de URL para username
+            if (urlParams.has('user')) {
+                spinWheel(urlParams.get('user'));
+            }
+        });
+
+        // Configurar la ruleta
+        function setupWheel() {
+            wheel = document.getElementById('wheel');
+            const weightedItems = getWeightedItems();
+            const segmentCount = weightedItems.length;
+            const anglePerSegment = 360 / segmentCount;
+            
+            for (let i = 0; i < segmentCount; i++) {
+                const segment = document.createElement('div');
+                segment.className = 'segment';
+                segment.style.backgroundColor = weightedItems[i].color;
+                segment.style.transform = `rotate(${i * anglePerSegment}deg)`;
+                
+                const text = document.createElement('div');
+                text.className = 'segment-text';
+                text.innerText = weightedItems[i].text;
+                
+                segment.appendChild(text);
+                wheel.appendChild(segment);
+            }
+        }
+        
+        // Obtener lista de elementos ponderada según probabilidades
+        function getWeightedItems() {
+            const weighted = [];
+            
+            // Separar premios y castigos
+            const prizes = config.items.filter(item => item.isPrize);
+            const punishments = config.items.filter(item => !item.isPrize);
+            
+            // Añadir según las probabilidades configuradas
+            for (let i = 0; i < prizes.length; i++) {
+                for (let j = 0; j < config.probability.prize; j++) {
+                    weighted.push(prizes[i]);
+                }
+            }
+            
+            for (let i = 0; i < punishments.length; i++) {
+                for (let j = 0; j < config.probability.punishment; j++) {
+                    weighted.push(punishments[i]);
+                }
+            }
+            
+            // Mezclar array para que sea aleatorio
+            return shuffleArray(weighted);
+        }
+        
+        // Mezclar array (algoritmo Fisher-Yates)
+        function shuffleArray(array) {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        }
+        
+        // Configurar confeti
+        function setupConfetti() {
+            const canvas = document.getElementById('canvas');
+            confettiInstance = new ConfettiGenerator({
+                target: 'canvas',
+                max: 200,
+                size: 1.5,
+                animate: true,
+                respawn: false,
+                props: ['circle', 'square', 'triangle', 'line'],
+                colors: [[165,104,246], [230,61,135], [0,199,228], [253,214,126]],
+                clock: 25
+            });
+        }
+        
+        // Girar la ruleta
+        function spinWheel(username) {
+            if (isSpinning) return;
+            isSpinning = true;
+            
+            // Mostrar nombre de usuario y contenedor
+            document.getElementById('username').textContent = `¡${username} gira la ruleta!`;
+            document.getElementById('container').style.display = 'block';
+            document.getElementById('resultDisplay').style.display = 'none';
+            
+            // Calcular rotación aleatoria (entre 5 y 10 vueltas completas)
+            const minSpins = 5;
+            const maxSpins = 10;
+            const spinCount = minSpins + Math.random() * (maxSpins - minSpins);
+            const spinAngle = spinCount * 360;
+            
+            // Añadir un ángulo adicional para determinar el ganador
+            const itemCount = wheel.children.length;
+            const anglePerItem = 360 / itemCount;
+            const randomItem = Math.floor(Math.random() * itemCount);
+            const finalAngle = spinAngle + (randomItem * anglePerItem);
+            
+            // Aplicar la rotación
+            wheel.style.transform = `rotate(${finalAngle}deg)`;
+            
+            // Esperar a que termine la animación y mostrar resultado
+            setTimeout(() => {
+                showResult(randomItem);
+            }, 5000); // Debe coincidir con la duración de la transición CSS
+        }
+        
+        // Mostrar el resultado
+        function showResult(index) {
+            const weightedItems = getWeightedItems();
+            const result = weightedItems[index];
+            const resultDisplay = document.getElementById('resultDisplay');
+            
+            resultDisplay.textContent = result.text;
+            resultDisplay.style.display = 'block';
+            resultDisplay.style.backgroundColor = result.isPrize ? 'rgba(76, 175, 80, 0.8)' : 'rgba(244, 67, 54, 0.8)';
+            
+            // Mostrar efectos según el tipo de resultado
+            if (result.isPrize) {
+                showConfetti();
+            } else {
+                showSkulls();
+            }
+            
+            // Reiniciar después de un tiempo
+            setTimeout(resetWheel, 8000);
+        }
+        
+        // Mostrar efecto de confeti para premios
+        function showConfetti() {
+            confettiInstance.render();
+        }
+        
+        // Mostrar efecto de calaveras para castigos
+        function showSkulls() {
+            const skullContainer = document.getElementById('skullContainer');
+            skullContainer.style.display = 'block';
+            skullContainer.innerHTML = '';
+            
+            // Crear calaveras animadas
+            for (let i = 0; i < 30; i++) {
+                const skull = document.createElement('div');
+                skull.className = 'skull';
+                skull.innerHTML = '💀';
+                skull.style.left = `${Math.random() * 100}%`;
+                skull.style.animationDelay = `${Math.random() * 2}s`;
+                skullContainer.appendChild(skull);
+            }
+        }
+        
+        // Reiniciar la ruleta
+        function resetWheel() {
+            // Ocultar elementos
+            document.getElementById('container').style.display = 'none';
+            document.getElementById('resultDisplay').style.display = 'none';
+            document.getElementById('skullContainer').style.display = 'none';
+            document.getElementById('username').textContent = '';
+            
+            // Detener confeti
+            if (confettiInstance) {
+                confettiInstance.clear();
+            }
+            
+            // Reiniciar la rotación de la rueda
+            setTimeout(() => {
+                wheel.style.transition = 'none';
+                wheel.style.transform = 'rotate(0deg)';
+                
+                // Forzar recálculo para que la transición se restablezca
+                void wheel.offsetWidth;
+                wheel.style.transition = 'transform 5s cubic-bezier(0.2, 0.1, 0.1, 1.0)';
+                isSpinning = false;
+            }, 100);
+        }
+    </script>
+</body>
+</html>
