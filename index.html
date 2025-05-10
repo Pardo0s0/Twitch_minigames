@@ -227,17 +227,21 @@
             setupWheel();
             setupConfetti();
             
-            // Escuchar mensajes desde OBS
-            window.addEventListener('message', function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'SPIN' && !isSpinning) {
-                        spinWheel(data.username || 'Usuario');
-                    }
-                } catch (e) {
-                    console.error('Error processing message:', e);
-                }
-            });
+            // Escuchar mensajes desde cualquier origen (StreamElements)
+window.addEventListener('message', function(event) {
+    try {
+        // Aceptar mensajes tanto en formato de string como de objeto
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        console.log('Mensaje recibido:', data); // Para depuración
+        
+        if (data.type === 'SPIN' && !isSpinning) {
+            spinWheel(data.username || 'Usuario');
+            console.log('Girando para:', data.username);
+        }
+    } catch (e) {
+        console.error('Error procesando mensaje:', e);
+    }
+});
             
             // Para pruebas: permitir girar la ruleta con clic
             document.body.addEventListener('click', () => {
